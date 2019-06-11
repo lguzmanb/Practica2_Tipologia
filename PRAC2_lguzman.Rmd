@@ -2,9 +2,11 @@
 title: "PRACTICA 2"
 author: "Laura Guzman"
 date: "28 maig de 2019"
-output: 
+output:
+  pdf_document:
+    toc: yes
   html_document:
-    toc: true
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -14,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 #PRÀCTICA 2 
 
 
-##1. Descripció del dataset. Perquè és important i quina pregunta/problema pretén respondre?
+#1. Descripció del dataset. Perquè és important i quina pregunta/problema pretén respondre?
 
 El dataset conté les dades de la supervivència dels passatgers del titànic segons els atributs dels passatgers.
 
@@ -49,17 +51,29 @@ str(train)
 
 Veiem que el conjunt de train compta amb 891 mostres que tenen 12 atributs.
 Aquests 12 atributs són: 
+
 -PassengerId, identifica el passetger, enter.
+
 -Survived, classe a predir, 0 és igual a No. Hauria de ser un factor i apareix com enter
+
 -Pclass, classe de tiquet ( primera, segona o tercera), també hauria de ser un factor.
+
 -Name, nom del passatger, caràcter, no és rellevant.
+
 -Sex, sexe. És un caràcter i hauria de ser un factor.
+
 -Age, edat. També podria ser un factor o es podria posar en intervals.
+
 -SibSp (nombre de germans/conjugues a bord), enter.
+
 -Parch (nombre de pares/fills a bord), enter.
+
 -Ticket (número de tiquet), caràcter, irrellevant.
+
 -Fare (tarifa), nombre.
+
 -Cabin (número de cabina), caràcter, irrellevant.
+
 -Embarked (port embarcació:C = Cherbourg, Q = Queenstown, S = Southampton).És un caràcter i hauria de ser factor. 
 
 
@@ -81,9 +95,13 @@ Veiem que el conjunt de test compta amb 418 mostres que tenen 11 atributs (en aq
 Aquests 11 atributs són: PassengerId, Pclass, Name, Sex, Age, SibSp, Parch, Ticket, Fare, Cabin i Embarked.
 Aquest conjunt de dades només l'utilitzarem per fer la predicció.
 
-##2. Integració i selecció de les dades d'interès a analitzar.
 
-Primer de tot, discretitem les variables que haurien de ser factor i són un altre tipus.
+
+
+
+#2. Integració i selecció de les dades d'interès a analitzar.
+
+Primer de tot, discretitzem les variables que haurien de ser factor i són un altre tipus.
 
 ```{r}
 # Per a quines variables tindria sentit un procés de discretització?
@@ -108,6 +126,386 @@ for (i in cols){
 
 
 ```
+
+
+```{r}
+
+#Carreguem llibreries
+library(ggplot2)
+library(dplyr)
+```
+
+
+
+
+Tractem els dos fitxers (train i test) junts,  ja que si els tractem per separat llavors podriem estar assignant valors de manera diferent a cada grup i estar canviant la mostra.
+Diferenciem els registres de test de train a través del valor de Survived
+
+
+```{r}
+#Creem variable Survived a test
+test$Survived <- NA
+
+#Combinem
+total <- bind_rows(train,test)
+
+
+```
+
+
+Per a l'estudi, utilitzarem les variables Survived (variable a predir) i PClass, Sex, Age, SibSp, Parch, Fare i Embarked.
+Descartem PassengerId ja que no és cap característica, també descartem el nom ja que el nom ens diu si és home o dona o nen, però això també ho podem saber a través de l'edat i el sexe, descartem ticket i cabin ja que son variables que tenen valors molt dispersos (per exemple eb cabin hi ha moltes cabines diferents i la seva numeració no segueix cap tipus de relació lineal) i que no ens aporten molt. El que si que utilitzardm de cabin serà la lletra de la coberta. 
+
+```{r}
+#Treiem variables que no utilitzarem
+total <- select(total, -Name, -Ticket) #, -PassengerId no el treiem perquè el necessitem pels resultats de test per penjar
+
+#Comprovem
+summary(total)
+head(total)
+
+```
+
+
+
+
+#3. Neteja de les dades.
+
+
+
+
+
+##3.1. Les dades contenen zeros o elements buits? Com gestionaries aquests casos?
+```{r}
+#Mirem si conté valors buits
+colSums(is.na(total))
+colSums(total=="")
+
+
+```
+
+
+Les variables que contenen valors buits són Age , Embarked, Fare i Cabin. 
+Els valors buits de Survived són els registres de test.
+
+
+
+Creem variable coberta i eliminem cabin i tractem valors buits de coberta
+Coberta és la lletra de cabin
+```{r}
+
+total$Coberta<-factor(sapply(total$Cabin, function(x) {strsplit(x, NULL)[[1]][1]}))
+total <- select(total, -Cabin)
+
+```
+
+Mirem valors coberta segons pclass
+```{r}
+ggplot(total,aes(x=Coberta,fill=Pclass))+geom_bar(position='fill')+facet_wrap(~Sex)
+
+```
+
+
+Veiem que els de primera classe anaven a A,B,C i T íntegrament i compartien D i E.
+Veiem que els de segona classe compartien D , E i F.
+Veiem que els de tercera classe estaven a G i compartien F i E.
+
+Veiem que a T no hi havia dones i a G no hi havia homes.
+
+Veiem que les dones de primera classe estan a A,B, C, D i E en més d'un 50%
+Veiem que les dones de segona classe estan a F en més d'un 50%
+Veiem que les dones de tercera classe estan a G en més d'un 50%.
+
+Veiem que els homes de primera classe estan a A,B,C,D,E en més d'un 50%.
+Veiem que els homes de segona classe estan a F en un 50%.
+Veiem que els homes de tercera classe estan a F en un 50%.
+
+És dificil imputar una lletra segons la classe i mirem segons embarked i tampoc, de manera que ho tractem posant NA i creant un nou grup i utilitzant addna:
+
+```{r}
+total$Coberta[total$Coberta=='']<-NA
+total$Coberta <- factor(total$Coberta)
+total$Coberta <- addNA(total$Coberta)
+
+#Visualitzem;
+
+ggplot(data=total,aes(x=Coberta,fill=Survived))+geom_bar()
+```
+
+
+
+
+Pels valors buits d'embarked, primer comprovem quins són:
+
+
+
+```{r}
+#Comprovem quins son els valors buits d'embarked
+total[total$Embarked=="",]
+table(total$Embarked)
+
+table(total$Survived,total$Embarked)
+table(total$Sex,total$Embarked)
+table(total$Pclass,total$Embarked)
+
+```
+
+Veiem que de 464 dones, 113 embarquen a C, 60 a Q i 291 a S. 
+
+Veiem que de 321 persones de primera classe, 141 embarquen a C, 3 a Q i 177 a S.
+
+Veiem que de 340 que son supervivents, 93 embarquen a C, 30 a Q i 217 a S. 
+
+Com que els valors buits d'embarked són dones de primera classe i supervivents, llavors els hi assignarem el valor S ja que és el que té més freqüència en el seu cas.
+
+```{r}
+
+# Prenem el valor "S" pels valors buits de la variable "Embarked" 
+total$Embarked<- as.character(total$Embarked)# El posem numeric perquè no quedi el factor "" (buit)
+total$Embarked[total$Embarked==""]<-"S"
+total$Embarked<- as.factor(total$Embarked) #El tornem a factor
+
+
+```
+
+
+Fare: Com que veiem que el registre que li falta fare és de classe 4 i va embarcar a S, utilitzem només els registres que compleixen aquestes condicions per fer la mitjana i assignar-la al valor de fare buit.
+
+
+
+```{r}
+
+# Comprovem el valor de Fare que falta
+total[is.na(total$Fare) ,]
+
+#Fare, posem la mitjana segons pclass =3, embarked=S i el sexe= male
+total$Fare[is.na(total$Fare) ] <- mean(total$Fare[total$Pclass=='3' & total$Embarked=='S' & total$Sex=='male'],na.rm=T)
+
+
+```
+
+
+
+
+Pels valors buits de age, en un principi voliem posar la mitjana d'edat segons el sexe, però al haver-hi tants valors buits, hem preferit utilitzar la funció  k Nearest Neighbor
+
+
+```{r}
+
+#Age assignem valor per knn
+
+#Fem grups de train ( valors que no son buits de Age) i test ( valors buits d'Age) i els valors resultat d'edat de train
+
+age_nobuit<-total[!is.na(total$Age),]
+age_buit<-total[is.na(total$Age),]
+age_solucio<-age_nobuit$Age
+
+
+#Embarked, sex , pclass i Coberta els binaritzem
+library(fastDummies)
+
+age_nobuit<- fastDummies::dummy_cols(age_nobuit, select_columns =c("Embarked", "Sex", "Pclass"))
+age_buit<- fastDummies::dummy_cols(age_buit, select_columns =c("Embarked", "Sex", "Pclass"))
+
+#Eliminem les variables originals que no estan binaritzades
+age_nobuit<-select(age_nobuit,-Survived,-Age,-Embarked,-Sex,-Pclass,-Coberta)
+age_buit<-select(age_buit,-Survived,-Age,-Embarked,-Sex,-Pclass,-Coberta)
+
+
+library(class)
+
+#Utilitzem com a k l'arrel del nombre de registres de la mostra i apliquem knn
+ageknn<-knn(age_nobuit,age_buit,age_solucio,k=36) #ageknn seran les edats que ens falten
+
+
+#Assignem les edats resultants als valors nuls 
+total$Age[is.na(total$Age)]<-ageknn
+
+#Si haguéssim volgut assignar als valors buits de Age la mitjana segons el sexe, haguéssim fet:
+
+    # Agafem la mitjana segons el sexe pels valors buits de la variable "Age"
+    #total$Age[is.na(total$Age) & total$Sex=='female' ] <-   mean (total$Age [total$Sex=='female'], na.rm=T)
+
+    #total$Age[is.na(total$Age) & total$Sex=='male' ] <- mean(total$Age[total$Sex=='male'], na.rm=T)
+
+```
+
+
+
+
+##3.2. Identificació i tractament de valors extrems.
+
+```{r}
+#Primer de tot busquem si hi ha valors sentinella (valors extrems per representar una situació especial)
+
+ggplot(mapping= aes(x=total$Survived))+ geom_density()
+ggplot(mapping= aes(x=total$Pclass))+ geom_density()
+ggplot(mapping= aes(x=total$Sex))+ geom_density()
+ggplot(mapping= aes(x=total$Age))+ geom_density()
+ggplot(mapping= aes(x=total$Embarked))+ geom_density()
+ggplot(mapping= aes(x=total$SibSp))+ geom_density()
+ggplot(mapping= aes(x=total$Parch))+ geom_density()
+```
+
+Veiem que en principi cada variable segueix una seqüència lògica, a part de Parch i SibSp que tenen acumulada la majoria a 0, que vol dir que no viatjaven amb família, però té sentit.
+
+Valors atípics:
+
+```{r}
+summary(total)
+```
+
+Sabem que Survived només conté valors 0 i 1, Plass conté 1,2 i 3, Sex conté masculí i femení, Embarked conté C, S o Q.
+```{r}
+
+#Valors atípics
+boxplot.stats(total$Age)
+#Boxplot
+boxplot(total$Age, main="Box plot Age")
+
+ggplot(data=total, aes(total$Survived, total$Age)) + geom_boxplot()+ ggtitle('Boxplot Age segons Survived')
+
+```
+
+Veiem que són atípics els valors per sota 3 anys i els de sobre de 54, tot i que no ho tractem ja que creiem que són coses de les dades i no perquè siguin mostres especials (extremes).
+
+Quan mirem Age segons Survived, veiem que només hi ha outliers a 1 i NA.
+No els eliminem ja que a la hora de predir, si al test tenim gent d'aquesta edat ( almenys al gràfic veiem que n'hi ha de semblant), llavors no prediriem bé el resultat.
+
+
+```{r}
+
+#Valors atípics
+boxplot.stats(total$SibSp)
+#Boxplot
+boxplot(total$SibSp, main="Box plot SibSp")
+
+ggplot(data=total, aes(total$Survived, total$SibSp)) + geom_boxplot()+ ggtitle('Boxplot SibSp segons Survived')
+
+```
+
+Veiem que els valors per sobre de 2 serien atípics.
+
+Si dividim el boxplot per survived, veiem que els NA(valors de test) contenen valors ouliers que també estan a train , de manera que no eliminem els outliers ja que ens seran utils per a la predicció.
+
+```{r}
+
+
+#Valors atípics
+boxplot.stats(total$Parch)
+#Boxplot
+boxplot(total$Parch, main="Box plot Parch")
+
+ggplot(data=total, aes(total$Survived, total$Parch)) + geom_boxplot()+ ggtitle('Boxplot Parch segons Survived')
+
+```
+Veiem que el valor majoritari de parch és 0.
+
+Quan dividim els valors segons survived, veiem que els NA també contenen outliers i que la distribució dels NA és molt semblant a la dels 0. No elminimen els outliers pel mateix motiu que en els anteriors: a la hora de predir test ens aniran bé.
+
+
+```{r}
+
+#Valors atípics
+boxplot.stats(total$Fare)
+#Boxplot
+boxplot(total$Fare, main="Box plot Fare")
+
+ggplot(data=total, aes(total$Survived, total$Fare)) + geom_boxplot()+ ggtitle('Boxplot Fare segons Survived')
+```
+
+Veiem que la tarifa, a partir de 65 ja no hi ha tanta densitat. Destacar que n'hi ha un outlier que és extrem, 512.392, però com que no serà variable de l'estudi, el deixem.
+
+Veiem que l'outlier extrem, està tant en els sobrevivents com en el NA (test), llavors els outliers ens serviran per predir millor. 
+
+Comprovem qui té el valor de 512:
+
+```{r}
+#Comprovem qui és el que té aquest valor:
+total[total$Fare>300,]
+
+```
+Com que veiem que un d'ells forma part de test, no els podem eliminar.
+Tampoc els canviarem el valor ja que èr exemple en un primer moment hem pensat que el valor podria ser per exemple 51.23, però al ser de primera classe ho descartem.
+
+
+
+#2B. Creem variables
+
+Creem variables dummy per sex.
+
+Creem la variable Family, que és la suma de SibSp i Parch
+
+Creem la variable Alone, que indica si té family o no
+
+Creem la variable Agec, que és age dividit en dos intervals: Nens i Adults
+
+Creem la variable Agec3, que és Age dividit en 3 intervals: Nens, Adults i Avis
+
+Creem la variable Farebin, que és Fare dividit en 6 intervals.
+
+```{r}
+#Crear variables dummy per sex i embarked
+total$SexR<-relevel(total$Sex,"female")
+#total$EmbarkedR<-relevel(total$Embarked,"C")
+
+
+#Creem variable family, que és el nombre de familiars
+total$Family<-total$SibSp+total$Parch
+
+total$Family<-as.numeric(total$Family)
+
+#Creem variable Alone, que és si viatjava sol o acompanyat
+total$Alone[total$Family>0]<-"1"
+total$Alone[total$Family==0]<-"0"
+
+total$Alone<- as.factor(total$Alone)
+
+#Creem variable Agec, que és la variable Age amb dues categories segons si és nen o adult
+total$Agec[total$Age<18]<-"Nen"
+total$Agec[total$Age>=18]<-"Adult"
+
+total$Agec<- as.factor(total$Agec)
+
+#Creem variable Agec3, amb 3 categories
+total$Agec3<-"Adult"
+total$Agec3[total$Age<14]<-"Nen"
+total$Agec3[total$Age>=60]<-"Avi"
+total$Agec3<- as.factor(total$Agec3)
+
+library(car)
+
+#Mirem valors Fare
+summary(total$Fare)
+
+#Mirem valors últim quartil Fare
+summary(total$Fare[total$Fare>31.275])
+
+#Creem intervals a Fare
+total$Farebin<-Recode(total$Fare,"0.0:7.896='Fare5';7.8961:14.454='Fare4';14.4541:31.275='Fare3';31.275: 49.75='Fare2'; 49.751:93.55='Fare1';93.551:512.34='Fare0'", levels=c('Fare0','Fare1','Fare2','Fare3','Fare4','Fare5' ))
+total$Farebin<-as.factor(total$Farebin)
+
+
+```
+I comprovem les dades que hem creat:
+```{r}
+summary(total)
+```
+
+
+Finalment tornem a separar els dos datasets en test i train
+```{r}
+train<-total[!is.na(total$Survived),]
+test<-total[is.na(total$Survived),]
+
+```
+
+
+
+
+#4. Anàlisi de les dades.
+
+## 4.0 Anàlisi descriptiu de les dades
 
 Analitzem relacions entre variables 
 
@@ -137,10 +535,21 @@ Veiem que els de primera classe són els que més van sobreviure
 
 
 ```{r}
-# Now, Supervivents segons Embarked i Pclass:
+#  Supervivents segons Embarked i Pclass:
 ggplot(data = train,aes(x=Embarked,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Pclass)
 
 ```
+
+
+```{r}
+#  Supervivents segons Sex i Pclass:
+ggplot(data = train,aes(x=Sex,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Pclass)
+
+```
+
+Veiem que les dones de primera i segona classe tenen una supervivència de més del 85%, en canvi les de tercera classe tenen un índex de supervivència del 50%. 
+
+Veiem que els homes de primera classe tenen una supervivència d'un 37% i que els homes de segona i tercera classe tenen menys supervivència, d'un 15% aproximadament.
 
 
 
@@ -149,221 +558,61 @@ ggplot(data = train,aes(x=Embarked,fill=Survived))+geom_bar(position="fill")+fac
 # Visualitzem Survival en funció de sibsp (Freqüència)
 ggplot(data = train,aes(x=SibSp,fill=Survived))+geom_bar(position="fill")+ylab("Frequencia")
 ```
+Veiem que a partir de SibSp>4 l'íned de supervivència és 0%. Els que tenen més supervivència són els que tenen SibSp 1 o 2.
+
+
 
 ```{r}
 # Visualitzem Survival en funció de Parch (Freqüència)
 ggplot(data = train,aes(x=Parch,fill=Survived))+geom_bar(position="fill")+ylab("Frequencia")
 ```
 
+Veiem que els que tenen més supervivència són els que tenen parch 3 i 1.
 
 
 
-```{r}
-#Survival respecte de age:
-ggplot(data = train[!(is.na(train$Age)),],aes(x=Age,fill=Survived))+geom_histogram(binwidth =3)
-```
 
 ```{r}
 #Survival respecte de age (freq):
-ggplot(data = train[!(is.na(train$Age)),],aes(x=Age,fill=Survived))+geom_histogram(binwidth =3, position="fill")+ylab("Frequència")
+ggplot(data = train[!(is.na(train$Age)),],aes(x=Age,fill=Survived))+geom_histogram(binwidth =2, position="fill")+ylab("Frequència")
 ```
 
 
+Veiem que per sota de 16 anys l'índex de supervivència és alt: de 0 a 8 anys és 50% o més i de 13 a 16 anys també.
 
-En aquest cas, la variable a predir és Survived i les variables que no utilitzarem per predir son PassengerId, Name i Cabin.
-
-
-
-##3. Neteja de les dades.
+També és força alt, però menys del 50% pels voltants dels 21-44 anys. A partir dels 46 anys fins als 62 també hi ha algunts punts alts de supervivència.
 
 
-###3.1. Les dades contenen zeros o elements buits? Com gestionaries aquests casos?
-```{r}
-#Mirem si train conté valors buits
-colSums(is.na(train))
-colSums(train=="")
 
-#mirem si test conté valors buits
-colSums(is.na(test))
-colSums(test=="")
-```
-Veiem que de les variables que utilitzarem, una que conté valors buits és Age i Embarked.Les altres, com Fare, com que no les utilitzarem, no les tractem.
-Ho tractem:
-Pels valors buits de age, hi posarem la mitjana i pels valors buits d'embarked, com que hem vist que els dos valors són supervivents i que els que tenen més probabilitat de sobreviure són els de la classe C, llavors a aquests valors els hi donarem el valor C. 
-```{r}
-
-# Agafem la mitjana segons el sexe pels valors buits de la variable "Age" de train
-train$Age[is.na(train$Age) & train$Sex=='female' ] <- mean(train$Age[train$Sex=='female'],na.rm=T)
-
-train$Age[is.na(train$Age) & train$Sex=='male' ] <- mean(train$Age[train$Sex=='male'],na.rm=T)
-
-# Agafem la mitjana pels valors buits de la variable "Age" de test
-
-test$Age[is.na(test$Age) & test$Sex=='female' ] <- mean(test$Age[test$Sex=='female'],na.rm=T)
-
-test$Age[is.na(test$Age) & test$Sex=='male' ] <- mean(test$Age[test$Sex=='male'],na.rm=T)
-
-
-#Com que hem vist que els que tenen més probabilitat de sobreviure dels Embarked son C i els valors buits de Embarked els 2 sobreviuen, llavors posem que els nulls son categoria C.
-# Prenem el valor "C" per els valors buits de la variable "Embarked" de train
-train$Embarked<- as.character(train$Embarked)# El posem numeric perquè no quedi el factor "" (buit)
-train$Embarked[train$Embarked==""]<-"C"
-train$Embarked<- as.factor(train$Embarked) #El tornem a factor
-
-
-#Fare , posarem la mitjana
-test$Fare[is.na(test$Fare) ] <- mean(test$Fare,na.rm=T)
-
-
-```
-
-
-###3.2. Identificació i tractament de valors extrems.
-
-```{r}
-#Primer de tot busquem si hi ha valors sentinella (valors extrems per representar una situació especial)
-
-ggplot(mapping= aes(x=train$Survived))+ geom_density()
-ggplot(mapping= aes(x=train$Pclass))+ geom_density()
-ggplot(mapping= aes(x=train$Sex))+ geom_density()
-ggplot(mapping= aes(x=train$Age))+ geom_density()
-ggplot(mapping= aes(x=train$Embarked))+ geom_density()
-ggplot(mapping= aes(x=train$SibSp))+ geom_density()
-ggplot(mapping= aes(x=train$Parch))+ geom_density()
-```
-
-Veiem que en principi cada variable segueix una seqüència lògica, a part de Parch i SibSp que tenen acumulada la majoria a 0, que vol dir que no viatjaven amb família, però té sentit.
-
-Valors atípics:
-
+##4.1. Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar).
+Com que el que volem és predir la supervivència de les dades de test a partir de train, Utilitzarem principalment les dades de train, menys quan predim els valors de test, que utilitzarem test. 
+A train hi tenim les següents variables: 
 ```{r}
 summary(train)
 ```
 
-Sabem que Survived només conté valors 0 i 1, Plass conté 1,2 i 3, Sex conté masculí i femení, Embarked conté C, S o Q.
+A train podem eliminar PassengerId ( a test no perquè ho necessitem per penjar-ho a kaggle).
 ```{r}
-
-
-#Valors atípics
-boxplot.stats(train$Age)
-#Boxplot
-boxplot(train$Age, main="Box plot Age")
-
-
-```
-
-Veiem que són atípics els valors per sota 3 anys i els de sobre de 54, tot i que no ho tractem ja que creiem que són coses de les dades i no perquè siguin mostres especials (extremes).
-
-```{r}
-
-#Valors atípics
-boxplot.stats(train$SibSp)
-#Boxplot
-boxplot(train$SibSp, main="Box plot SibSp")
-
-```
-
-Veiem que els valors per sobre de 2 serien atípics.
-
-```{r}
-
-
-#Valors atípics
-boxplot.stats(train$Parch)
-#Boxplot
-boxplot(train$Parch, main="Box plot Parch")
-
-
-```
-Veiem que el valor majoritari de parch és 0.
-
-
-```{r}
-
-#Valors atípics
-boxplot.stats(train$Fare)
-#Boxplot
-boxplot(train$Fare, main="Box plot Fare")
-
-```
-
-Veiem que la tarifa, a partir de 65 ja no hi ha tanta densitat. Destacar que n'hi ha un outlier que és extrem, 512.392, però com que no serà variable de l'estudi, el deixem.
-
-##4. Anàlisi de les dades.
-###4.1. Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar).
-
-Creem variables
-```{r}
-#Crear variables dummy per sex 
-train$SexF<-relevel(train$Sex,"female")
-test$SexF<-relevel(test$Sex,"female")
-train$Embarked<-relevel(train$Embarked,"C")
-test$Embarked<-relevel(test$Embarked,"C")
-
-
-#Creem variable family, que és el nombre de familiars
-train$Family<-train$SibSp+train$Parch
-test$Family<-test$SibSp+test$Parch
-
-train$Family<-as.numeric(train$Family)
-
-#Creem variable Alone, que és si viatjava sol o acompanyat
-train$Alone[train$Family>0]<-"1"
-train$Alone[train$Family==0]<-"0"
-
-
-train$Alone<- as.factor(train$Alone)
-
-
-test$Alone[test$Family>0]<-"1"
-test$Alone[test$Family==0]<-"0"
-test$Alone<- as.factor(test$Alone)
-
-
-
-#Creem variable Agec, que és la variable Age amb dues categories segons si és nen o adult
-train$Agec[train$Age<18]<-"Nen"
-train$Agec[train$Age>=18]<-"Adult"
-
-train$Agec<- as.factor(train$Agec)
-
-test$Agec[test$Age<18]<-"Nen"
-test$Agec[test$Age>=18]<-"Adult"
-
-test$Agec<- as.factor(test$Agec)
-
-
-#Creem variable Agec3, amb 3 categories
-train$Agec3<-"Adult"
-train$Agec3[train$Age<14]<-"Nen"
-train$Agec3[train$Age>=60]<-"Avi"
-train$Agec3<- as.factor(train$Agec3)
-
-
-test$Agec3<-"Adult"
-test$Agec3[test$Age<14]<-"Nen"
-test$Agec3[test$Age>=50]<-"Avi"
-test$Agec3<- as.factor(test$Agec3)
-
-
+train<- select(train, -PassengerId)
 ```
 
 
+Les altres variables (Pclass, Sex, Age, Sibsp, parch, fare, embarked, sexr,family, alone, agec, agec3 i farebin) les utilitzarem per coneixr més la mostra en relació a survived fent contrasts d'hipòtesis i llavors utilitzarem els atributs per crear alguns models predictius com un model de regressió i un arbre per predir survived.
 
-Creem aquests grups de dades: X i y de train amb els atributs Pclass, Sex, Age, Embarked, SibSp i Parch i les dades de test amb els mateixos atributs
-```{r}
-#Seleccionem el dataset amb les dades que necessitem:
+Quan utilitzem Pclass, intentarem no utilitzar fare ja que estan relacionats directament, ja que els de classe 1 tindran un fare més elevat que els de classe 3.
+
+Quan utilitzem SibSp i Parch, no utilitzarem ni Family ni Alone ni Farebin. 
+
+Quan utilitzem Age, no utilitzarem ni Agec ni Agec3 i quan utilitzem Sex no utilitzarem SexR.
 
 
-```
-
-###4.2. Comprovació de la normalitat i homogeneïtat de la variància.
+##4.2. Comprovació de la normalitat i homogeneïtat de la variància.
 
 Al tenir una mostra de més de 30, considerem el Teorema del Limit Central i per tant, considerem que la mostra es distribueix normalment.
 
 ```{r}
 
-#Comprove normalitat de cada variable
+#Comprovem normalitat de cada variable
 library(nortest)
 alpha = 0.05
 col.names = colnames(train)
@@ -381,108 +630,294 @@ for (i in 1:ncol(train)) {
 }
 
 
-#Estudiem homogeneitat variancies
-fligner.test(as.numeric(Survived) ~ Age, data = train)
-fligner.test(as.numeric(Survived) ~ as.numeric(Sex), data = train)
-fligner.test(as.numeric(Survived) ~ as.numeric(Pclass), data = train)
-fligner.test(as.numeric(Survived) ~ as.numeric(Embarked), data = train)
-fligner.test(as.numeric(Survived) ~ SibSp, data = train)
-fligner.test(as.numeric(Survived) ~ Parch, data = train)
+
+#Estudiem homogeneitat variancies (vol veure es si la variància d'una variable és homogènia tenint en compte els diferents grups identificats per una variable categòrica com Survived)
+fligner.test(Age ~ Survived, data = train)
+fligner.test(Parch ~ Survived, data = train)
+fligner.test(SibSp ~ Survived, data = train)
+fligner.test(Family ~ Survived, data = train)
 
 
 
 ```
 Si p>0.05, acceptem Ho variances de les mostres son homogènies.
 
-Veiem que són homog`nies només en age.
+Veiem que són homogènies només en SibSp i que no són homogènies en Age, Parch i Family
 
 
 
-###4.3. Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l'objectiu de l'estudi, aplicar proves de contrast d'hipòtesis,correlacions, regressions, etc. Aplicar almenys tres mètodes d'anàlisi diferents.
+
+
+##4.3. Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l'objectiu de l'estudi, aplicar proves de contrast d'hipòtesis,correlacions, regressions, etc. Aplicar almenys tres mètodes d'anàlisi diferents.
 
 
 
-Contrast d'Hipòtesis:
-Hi ha diferència entre la supervivència dels homes i de les dones?
+###4.3.1Contrast d'hipòtesis
 
-Ho: mediana home = mediana dona
+####4.3.1.1- Hi ha diferència entre la supervivència dels homes i de les dones?
+
+Ho: mitjana home = mitjana dona
+
+H1(0):mitjana home <> mitjana dona
+
+H1(1): mitjana home > mitjana dona
+
+H1(2): mitjana dona > mitjana home
+
 ```{r}
-#Primer mirem si variancies son iguals:
-
+#Creem dues taules, una amb les dades de survived d'homes i l'altre de dones
 train_dona <- as.numeric(as.character(train$Survived[train$Sex=="female"]))
-
 train_home <- as.numeric(as.character(train$Survived[train$Sex=="male"]))
 
+#Primer mirem si variancies son iguals:
 var.test(train_home, train_dona, conf.level=.95) 
 
-#Fem el test per comprovar si home=dona
-t.test(train_home,train_dona)
+#Fem el test per comprovar si home=dona i H1(0)
+t.test(train_home,train_dona,var.equal=FALSE)
 
- #Com que veiem que no són iguals, fem un test per mirar quin és més:
+ #Com que veiem que no són iguals, fem un test per mirar si home>dona H1(1)
+t.test(train_home,train_dona,var.equal=FALSE, alternative='greater')
 
-t.test(train_home,train_dona, alternative='great')
+ #Com que veiem que no són iguals, fem un test per mirar si dona>home H1(2)
+t.test(train_dona,train_home,var.equal=FALSE, alternative='greater')
+
 
 
 ```
 
 I veiem que les variàncies són diferents, ja que p (0.02218) és més petit que 0.05, rebutjant la hipòtesis nul·la de que les variancies son iguals.
 
+
 En el t-test, veiem que p =2.2e-16 < 0.05,  per tant rebutjem la Hipòtesi nul·la, de manera que acceptem la Hipòtesi alternativa de que la mitjana de supervivència de l'home és  dierent que la de la dona, que vol dir que en un 95% de confiança obtenim que la mitjana de la supervivència dels homes és diferent a la mitjana de supervivència de les dones. 
 
-En el segon test on mirem si Ho:train_home< train_dona H1:train_home>train_dona, llavors veiem que p=1>0.05, per tant acceptem la hipòtesi nul·la que la mitjana de home en supervivència és més petita que la de la dona, de manera que vol dir que hi ha mes 0 ( no supervivents) i per tant, que les dones tenien més probabilitat de sobreviure. 
+Ara comprovem quina mitjana és més gran:
+
+En el segon test on mirem si H1(1):mitjana home > mitjana dona, llavors veiem que p=1>0.05, per tant no podem rebutjar la hipòtesi nul·la que la mitjana de home en supervivència és igual que la de la dona,  però si que rebutjem que mitjana_home>mitjana_dona
+
+En el tercer test on mirem si H1(1):mitjana dona > mitjana home, llavors veiem que p=2.2e-16<0.05 de manera que rebutjem la hipòtesi nul·la i acceptem l'hipòtesi alternativa que la mitjana de la dona és més gran que la de la dona, que vol dir que hi ha més hi ha mes 0 ( no supervivents) i per tant, que les dones tenien més probabilitat de sobreviure. 
+
+
+
+####4.3.1.2- Hi ha diferència entre la supervivència dels nens i dels adults?
+
+Ho: mitjana adult = mitjana nen
+
+H1(0):mitjana adult <> mitjana nen
+
+H1(1): mitjana adult > mitjana nen
+
+H1(2): mitjana nen > mitjana adult
+
+```{r}
+#Creem dues taules, una amb les dades de survived d'adults i l'altre de nens
+train_nen <- as.numeric(as.character(train$Survived[train$Agec=="Nen"]))
+train_adult <- as.numeric(as.character(train$Survived[train$Agec=="Adult"]))
+
+#Primer mirem si variancies son iguals:
+var.test(train_adult, train_nen, conf.level=.95) 
+
+#Fem el test per comprovar si nen=adult i H1(0)
+t.test(train_adult,train_nen,var.equal=TRUE)
+
+ #Com que veiem que no són iguals, fem un test per mirar si home>dona H1(1)
+t.test(train_adult,train_nen,var.equal=TRUE, alternative='greater')
+
+ #Com que veiem que no són iguals, fem un test per mirar si dona>home H1(2)
+t.test(train_nen,train_adult,var.equal=TRUE, alternative='greater')
+
+```
+
+
+
+I veiem que les variàncies són iguals, ja que p (0.5234) és més gran que 0.05, acceptant la hipòtesis nul·la de que les variancies son iguals.
+
+
+
+En el primer t-test, veiem que p =0.0004393 < 0.05,  per tant rebutjem la Hipòtesi nul·la, de manera que acceptem la Hipòtesi alternativa de que la mitjana de supervivència de l'adult és  dierent que la del nen, que vol dir que en un 95% de confiança obtenim que la mitjana de la supervivència dels adults és diferent a la mitjana de supervivència dels nens.
+
+Ara comprovem quina mitjana és més gran:
+
+En el segon test on mirem si H1(1):mitjana adult > mitjana nen, llavors veiem que p=0.9998>0.05, per tant no podem rebutjar la hipòtesi nul·la que la mitjana d'adult en supervivència és igual que la del nen,  però si que rebutjem que mitjana_adult>mitjana_nen
+
+En el tercer test on mirem si H1(1):mitjana nen > mitjana adult, llavors veiem que p=0.0002196<0.05 de manera que rebutjem la hipòtesi nul·la i acceptem l'hipòtesi alternativa que la mitjana dels nens és més gran que la dles adults, que vol dir que en adults hi ha més 0 ( no supervivents) i per tant, que els nens tenien més probabilitat de sobreviure. 
+
+
+
+####4.3.1.3- Hi ha diferència entre la supervivència dels que anaven sols i dels que anaven acompanyats?
+
+
+
+Ho: mitjana sol = mitjana acompanyat
+
+H1(0):mitjana sol <> mitjana acompanyat
+
+H1(1): mitjana sol > mitjana acompanyat
+
+H1(2): mitjana acompanyat > mitjana sol
+
+
+
+```{r}
+#Creem dues taules, una amb les dades de survived dels que van sols i l'altre dels que van acompanyats
+train_sol <- as.numeric(as.character(train$Survived[train$Alone=="0"]))
+train_acompanyat <- as.numeric(as.character(train$Survived[train$Alone=="1"]))
+
+#Primer mirem si variancies son iguals:
+var.test(train_sol, train_acompanyat, conf.level=.95) 
+
+#Fem el test per comprovar si nen=adult i H1(0)
+t.test(train_sol,train_acompanyat,var.equal=TRUE)
+
+ #Com que veiem que no són iguals, fem un test per mirar si home>dona H1(1)
+t.test(train_sol,train_acompanyat,var.equal=TRUE, alternative='greater')
+
+ #Com que veiem que no són iguals, fem un test per mirar si dona>home H1(2)
+t.test(train_acompanyat,train_sol,var.equal=TRUE, alternative='greater')
+
+```
+
+I veiem que les variàncies són iguals, ja que p (0.07955) és més gran que 0.05, acceptant la hipòtesis nul·la de que les variancies son iguals.
+
+
+En el primer t-test, veiem que p = 9.009e-10 < 0.05,  per tant rebutjem la Hipòtesi nul·la, de manera que acceptem la Hipòtesi alternativa de que la mitjana de supervivència dels que van sols és  dierent que la dels que van acompanyats, que vol dir que en un 95% de confiança obtenim que la mitjana de la supervivència dels que van sols és diferent a la mitjana de supervivència dels que van acompanyats.
+
+Ara comprovem quina mitjana és més gran:
+
+En el segon test on mirem si H1(1):mitjana sol > mitjana acompanyat, llavors veiem que p=1>0.05, per tant no podem rebutjar la hipòtesi nul·la que la mitjana dels que van sols en supervivència és igual que la dels que van acompanyats,  però si que rebutjem que mitjana_sol>mitjana_acompanyat
+
+En el tercer test on mirem si H1(1):mitjana acompanyat > mitjana sol, llavors veiem que p=4.505e-10<0.05 de manera que rebutjem la hipòtesi nul·la i acceptem l'hipòtesi alternativa que la mitjana dels que van acompanyats és més gran que la dels que van sols, que vol dir que en els que van sols hi ha més 0 ( no supervivents) i per tant, que els que van acompanyats tenien més probabilitat de sobreviure. 
 
 
 
 
-Regressió logarítmica:
+
+
+###4.3.2 Regressió logarítmica:
 ```{r}
 library(caret)
 
 #Creem Model regressió 
-lm_1=glm(Survived~Pclass+SexF+Age+Embarked+SibSp,train,family=binomial())
-lm_2=glm(Survived~Pclass+SexF+Age+Embarked+Family,train,family=binomial())
-lm_3=glm(Survived~Pclass+SexF+Age+Embarked+Parch+SibSp,train,family=binomial())
-lm_4=glm(Survived~Pclass+SexF+Agec+Embarked+Parch+SibSp,train,family=binomial())
-lm_5=glm(Survived~Pclass+SexF+Agec3+Embarked+Parch+SibSp,train,family=binomial())
-lm_6=glm(Survived~Pclass+SexF+Agec3+Embarked+SibSp,train,family=binomial())
-lm_7=glm(Survived~Pclass+SexF+Agec3+Embarked+Family,train,family=binomial())
-lm_8=glm(Survived~Pclass+SexF+Agec3+Embarked+Alone,train,family=binomial())
-lm_9=glm(Survived~Pclass+SexF+Agec3+Embarked+Family+Fare,train,family=binomial())
+lm_1=glm(Survived~Pclass+SexR+Age+Embarked+SibSp,train,family=binomial())
+lm_2=glm(Survived~Pclass+SexR+Age+Embarked+Family,train,family=binomial())
+lm_3=glm(Survived~Pclass+SexR+Age+Embarked+Parch+SibSp,train,family=binomial())
+lm_4=glm(Survived~Pclass+SexR+Agec+Embarked+Parch+SibSp,train,family=binomial())
+lm_5=glm(Survived~Pclass+SexR+Agec3+Embarked+Parch+SibSp,train,family=binomial())
+lm_6=glm(Survived~Pclass+SexR+Agec3+Embarked+SibSp,train,family=binomial())
+lm_7=glm(Survived~Pclass+SexR+Agec3+Embarked+Family,train,family=binomial())
+lm_8=glm(Survived~Pclass+SexR+Agec3+Embarked+Alone,train,family=binomial())
+lm_9=glm(Survived~Pclass+SexR+Agec3+Embarked+Family+Fare,train,family=binomial())
+lm_10=glm(Survived~Pclass+SexR+Agec3+Embarked+Alone+Fare,train,family=binomial()) #Alone té relació oamb family, que aquest té relació amb SibSp i Parch
+lm_11=glm(Survived~Pclass+SexR+Agec3+Embarked+Alone+Farebin,train,family=binomial())
 
-AIC(lm_1,lm_2,lm_3,lm_4,lm_5,lm_6,lm_7,lm_8,lm_9)
+lm_1b=glm(Survived~Pclass+SexR+Agec3+Embarked+SibSp,train,family=binomial())
+lm_1c=glm(Survived~Pclass+SexR+Age+Embarked+Alone,train,family=binomial())
+lm_1d=glm(Survived~Pclass+SexR+Age+Embarked+Alone+Fare,train,family=binomial())
+lm_1e=glm(Survived~SexR+Age+Embarked+Alone+Fare,train,family=binomial())
+lm_1eb=glm(Survived~SexR+Age+Embarked+Fare,train,family=binomial())
+
+lm_12=glm(Survived~Pclass+SexR+Age+Embarked+SibSp+Coberta,train,family=binomial())
+
+
+
+AIC(lm_1,lm_2,lm_3,lm_4,lm_5,lm_6,lm_7,lm_8,lm_9, lm_10, lm_11, lm_1b, lm_1c, lm_1d, lm_1e, lm_1eb, lm_12)
 
 
 ```
 
-Veiem que el millor model és el lm_9, de manera que l'utilitzem per fer les prediccions
+Veiem que el millor model és el lm_1e, de manera que l'utilitzem per fer les prediccions:
 
+lm_1e:
+```{r}
+#Mostrem model
+lm_1e
+summary(lm_1e)
+
+
+#Predim en train, indicant que volem les probabilitats 
+train$pred<-predict(lm_1e,train,interval='response')
+test$pred<-predict(lm_1e,test,interval='response')
+
+
+#Si probabilitat>0.55 llavors train_predita=1
+train$pred[train$pred>0.55]<-1
+train$pred[train$pred<=0.55]<-0
+
+test$pred[test$pred>0.55]<-1
+test$pred[test$pred<=0.55]<-0
+
+train$Survived<- as.factor(train$Survived)
+train$pred<-as.factor(train$pred)
+
+matriu_conf<-confusionMatrix(train$pred,train$Survived)
+matriu_conf
+
+```
+
+Tot i semblar un molt bon model, obtenim una precisió de tant sols 77.44% en train. Al pujar les dades a kaggle, ens dóna una precisió del test de 77,03%.
+El model conté les variables sexe, age, embarked, alone i fare (pclass s'ha exclòs ja que té molta relació amb Fare i Sibsp i Parch formen part de alone )
+Veiem que totes les variables són significatives almenys al 90% menys Alone1.
+
+També hem provat de fer aquest mateix model però sense la variable Alone (lm_1eb), i no millorem ni el model (AIC) ni la precisió.
+
+
+Provem de predir amb el següent model que ens ha donat millors resultats, lm_11:
 
 
 ```{r}
 
 #Mostrem
-lm_9
-summary(lm_9)
+lm_11
+summary(lm_11)
 
 
 #Predim en train, indicant que volem les probabilitats 
-train$pred<-predict(lm_9,train,interval='response')
-test$pred<-predict(lm_9,test,interval='response')
+train$pred<-predict(lm_11,train,interval='response')
+test$pred<-predict(lm_11,test,interval='response')
 
+#Posant un llindar del 50%, provem:
+
+#Si probabilitat>0.5 llavors train_predita=1
+train$pred[train$pred>0.50]<-1
+train$pred[train$pred<=0.50]<-0
+
+test$pred[test$pred>0.50]<-1
+test$pred[test$pred<=0.50]<-0
+
+train$Survived<- as.factor(train$Survived)
+train$pred<-as.factor(train$pred)
+
+matriu_conf<-confusionMatrix(train$pred,train$Survived)
+matriu_conf
 
 
 ```
 
 
+En aquest model veiem que la variable Fare no és significativa, tot i que obtenim una millor precisió en train (80.47%).A kaggle obtenim una predicció de 77.03%, la mateixa que amb l'anterior.
+
+
+
+També provem de predir amb lm_10
+
 ```{r}
-#Posant un llindar del 70%, provem:
 
-#Si probabilitat>0.7 llavors train_predita=1
-train$pred[train$pred>0.70]<-1
-train$pred[train$pred<=0.70]<-0
+lm_10
+summary(lm_10)
 
-test$pred[test$pred>0.70]<-1
-test$pred[test$pred<=0.70]<-0
+
+#Predim en train, indicant que volem les probabilitats 
+train$pred<-predict(lm_10,train,interval='response')
+test$pred<-predict(lm_10,test,interval='response')
+
+
+
+
+#Si probabilitat>0.65 llavors train_predita=1
+train$pred[train$pred>0.65]<-1
+train$pred[train$pred<=0.65]<-0
+
+test$pred[test$pred>0.65]<-1
+test$pred[test$pred<=0.65]<-0
 
 train$Survived<- as.factor(train$Survived)
 train$pred<-as.factor(train$pred)
@@ -490,19 +925,11 @@ train$pred<-as.factor(train$pred)
 matriu_conf<-confusionMatrix(train$pred,train$Survived)
 matriu_conf
 ```
-
-
-Al haver canviat SibSp per family, el model no millora. Si que millora una mica si hi afegim Parch juntament a SibSp, però molt poc. Tot i així, veiem que el p-value de Parch a coefficients és més gran que 0.05, de manera que no es rebutja la hipòtesi nul·la de que el pendent és igual a 0, per tant la variable no és explicativa.
-
-En els resultats dels coeficients, veiem que per exemple, ser home baixa la probabilitat de sobreviure, ja que el seu pendent és -2.72 (272%). També veiem que la probabilitat de sobreviure de la classe 2 és més baixa que la classe 1 ( pendent -1.04), i la classe 3 encara té menys probabilitats de sobreviure que la 2.
-En quant a l'embarcament, veiem que els embarcats a C tenen més probabilitats de sobreviure que els embarcats a Q (-0.06) o que els embarcats a S(-0.48).
-També veiem que a més edat, menys probabilitat de sobreviure ( -0.03) o que també com més familia es tingui ( Parch o Sibsp), menys probabilitats de sobreviure.
-
-La precisió de la predicció és d'n 81.59%.
+Obtenim una precisió en train del 80.58% i a kaggle el test obté una puntuació de 0.77511, més alta que lm_11. En aquest cas veiem que Fare tampoc és significatiu.
 
 
 
-També ho fem amb lm_1
+Provem de predir amb lm_1:
 
 ```{r}
 
@@ -517,12 +944,12 @@ test$pred<-predict(lm_1,test,interval='response')
 
 
 
-#Si probabilitat>0.7 llavors train_predita=1
-train$pred[train$pred>0.70]<-1
-train$pred[train$pred<=0.70]<-0
+#Si probabilitat>0.55 llavors train_predita=1
+train$pred[train$pred>0.55]<-1
+train$pred[train$pred<=0.55]<-0
 
-test$pred[test$pred>0.70]<-1
-test$pred[test$pred<=0.70]<-0
+test$pred[test$pred>0.55]<-1
+test$pred[test$pred<=0.55]<-0
 
 train$Survived<- as.factor(train$Survived)
 train$pred<-as.factor(train$pred)
@@ -530,33 +957,140 @@ train$pred<-as.factor(train$pred)
 matriu_conf<-confusionMatrix(train$pred,train$Survived)
 matriu_conf
 ```
-L'accuracy és menys, però al haver canviat Age per Agec ( edat segons si es nen o adult), llavors podem veure que ser nen té més probabilitats de sobreviure que ser adult.
 
-Posem més intervals a Age
+En aquest model obtenim una precisió en train de 81.14% i en test ( kaggle) de 0.7799. (La millor puntuació del model feta fins ara, tot i no tenir un AIC de les més altes.)
+
+En aquest cas hem utilitzat les variables pclass, Sex, Age, Embarked i SibSp, on totes són significatives al 95%, menys EmbarkedQ, que això no vol dir que la variable Embarked no sigui significativa, sinó que EmbarkedQ en relació a la variable base d'Embarqued (EmbarquedC), no és significativa, però per exemple veiem que si que és significativa la diferència entre Embarked C i embarkedS.
 
 
+
+
+Provem de predir amb el model lm_8:
 
 ```{r}
+
+lm_8
+summary(lm_8)
+
+
+#Predim en train, indicant que volem les probabilitats 
+train$pred<-predict(lm_8,train,interval='response')
+test$pred<-predict(lm_8,test,interval='response')
+
+
+
+
+#Si probabilitat>0.55 llavors train_predita=1
+train$pred[train$pred>0.55]<-1
+train$pred[train$pred<=0.55]<-0
+
+test$pred[test$pred>0.55]<-1
+test$pred[test$pred<=0.55]<-0
+
+train$Survived<- as.factor(train$Survived)
+train$pred<-as.factor(train$pred)
+
+matriu_conf<-confusionMatrix(train$pred,train$Survived)
+matriu_conf
 ```
+Aquest model té una precisió de 80,47% en train i de 77,51% en test (kaggle), per tant no és la millor precisió que podem obtenir. Veiem que Alone no és significatiu i que Agec Avi tampoc (al 95%).
+
+
+Provem de predir amb lm_1d:
+```{r}
+lm_1d
+summary(lm_1d)
+
+
+#Predim en train, indicant que volem les probabilitats 
+train$pred<-predict(lm_1d,train,interval='response')
+test$pred<-predict(lm_1d,test,interval='response')
 
 
 
+
+#Si probabilitat>0.6 llavors train_predita=1
+train$pred[train$pred>0.60]<-1
+train$pred[train$pred<=0.60]<-0
+
+test$pred[test$pred>0.60]<-1
+test$pred[test$pred<=0.60]<-0
+
+train$Survived<- as.factor(train$Survived)
+train$pred<-as.factor(train$pred)
+
+matriu_conf<-confusionMatrix(train$pred,train$Survived)
+matriu_conf
+
+```
+En aquest cas obtenim una precisió en train de 79.46% i una precisió en test del 76.07% i per tant tampoc és una de les millors precisions.
+
+
+Per últim, provem de predir amb lm_1c:
 ```{r}
 
+lm_1c
+summary(lm_1c)
+
+
+#Predim en train, indicant que volem les probabilitats 
+train$pred<-predict(lm_1c,train,interval='response')
+test$pred<-predict(lm_1c,test,interval='response')
 
 
 
 
+#Si probabilitat>0.5 llavors train_predita=1
+train$pred[train$pred>0.50]<-1
+train$pred[train$pred<=0.50]<-0
 
+test$pred[test$pred>0.50]<-1
+test$pred[test$pred<=0.50]<-0
+
+train$Survived<- as.factor(train$Survived)
+train$pred<-as.factor(train$pred)
+
+matriu_conf<-confusionMatrix(train$pred,train$Survived)
+matriu_conf
 
 ```
+Obtenim una precisió en train del 79.8% i en test del 77,99%, una de les millors precisions en test. Tot i així, veiem que la variable Alone no és significativa. 
 
-Provem de fer un arbre:
+     
+
+
+Per tant els millors models en quant a precisió de test són lm_1c i lm_1.
+
+Veiem que la AIC de lm_1c és 813.59 i la AIC de lm_1 és 803.1. La principal diferència entre els dos models és que un utilitza Alone (que surt de family, que és la suma de Sibsp i Parch) i l'altre SibSp . Les variables en comú són Pclass, SexR, Age i Embarked (Fare no s'utilitza ja que utilitzem Pclass, i fent aquest model utilitzant fare enlloc de pclass ens surt més AIC però menys precisió en test). 
+
+Tot i que la AIC de lm_1c és més alta que lm_1, té la variable Alone que no és explicativa, ja que no és significativa ( si Alone =1 no té diferències de Alone=0, com que només té dos grups aquesta variable, llavors ens està dient que tampoc és explicativa del model).
+
+Veiem que en lm_1 obtenim la millor precisió en train (81.14%) enfront del 79.91% de lm1_1c, tot i que la precisió en test és la mateixa ( 77)
+
+Veiem que en lm_1 es classifiquen 514 de 648 "0" correctament (79.32%) i 134 "0" es classifiquen incorrectament com a "1" (20.68%). Dels "1", 35 de 243 estan mal classificats com a "0" (14.4%)i 208 estan ben classificats (85.6%). Per tant, veiem que classifica millor els 1 que els 0, però pot ser degut a que el llindar era 55%.
+
+Veiem que en lm_1c es classifiquen 512 de 654 "0" correctament (78.28%) i 142 "0" es classifiquen incorrectament com a "1" (21.72%). Dels "1", 37 de 237 estan mal classificats com a "0" (15.61%)i 200 estan ben classificats (84.39%). Per tant, veiem que classifica millor els 1 que els 0, tot i que el llindar és del 50%.
+
+Com que veiem que lm_1 classifica millor, expliquem aquest model :
+
+Aquest model utilitza les variables Pclass, SexR, Age, Embarked i SibSp.
+Veiem que totes les variables menys EmbarkedQ són significatives al 95%, cosa que vol dir que són explicatives del model. 
+
+En els resultats dels coeficients, veiem que per exemple, ser home baixa la probabilitat de sobreviure, ja que el seu pendent és -2.69 . També veiem que la probabilitat de sobreviure de la classe 2 és més baixa que la classe 1 ( pendent -1.05), i la classe 3 encara té menys probabilitats de sobreviure que la 2 (-2.23 respecte la 1).
+
+En quant a l'embarcament, veiem que els embarcats a C tenen menys probabilitats de sobreviure que els embarcats a Q (0.09), tot i que al no ser significatiu no sabem si és així, el que sí que sabem és que els embarcats a S tenen menys probabilitats de sobreviure que els embarcats a C(-0.50).
+
+També veiem que a més edat, menys probabilitat de sobreviure ( -0.03) o que també com més familia es tingui (Sibsp), menys probabilitats de sobreviure (-0.32)
+
+
+
+
+###4.3.3 Arbre
 
 ```{r}
 library(randomForest)
 
-equacio <- "Survived ~ Pclass + SexF + Age + SibSp + Parch + Embarked"
+equacio <- "Survived ~ Pclass + SexR + Age + SibSp + Parch + Embarked"
 formula <- as.formula(equacio)
 
 
@@ -565,7 +1099,6 @@ rf<- randomForest(formula=formula, data=train, ntree=500, mtry=3,nodesize=0.01*n
 #Predim resultats
 train$pred_arbre<-predict(rf,train)
 
-summary(test)
 
 #Al predir el test, ens surt error que type of predictors in new data do not match,
 #Per tant primer igualem
@@ -578,36 +1111,313 @@ levels(test$Embarked) <- levels(train$Embarked)
 #Predim en test
 test$pred_arbre<- predict(rf,newdata=test)
 
+rf
+plot (rf)
+legend('topright', colnames(rf$err.rate), col=1:3, fill=1:3)
+
+matriu_conf<-confusionMatrix(train$pred_arbre,train$Survived)
+matriu_conf
+
+```
+
+La precisió d'aquest model en test és del 77.033% (kaggle) i en train és del 87.77%. Provem de fer altres models:
+
+```{r}
+
+#Equacions i formules
+equacio1 <- "Survived ~ Pclass + SexR + Age + SibSp + Parch + Embarked+ Fare"
+formula1 <- as.formula(equacio1)
+
+equacio2 <- "Survived ~ Pclass + Sex + Age + SibSp + Parch + Embarked"
+formula2 <- as.formula(equacio2)
+
+equacio3 <- "Survived ~ Pclass + Sex + Age + Family + Embarked"
+formula3 <- as.formula(equacio3)
+
+equacio4 <- "Survived ~ Pclass + Sex + Age + Alone + Embarked"
+formula4 <- as.formula(equacio4)
+
+equacio5 <- "Survived ~ Pclass + Sex + Age + Alone + Embarked +Fare"
+formula5 <- as.formula(equacio5)
+
+equacio6 <- "Survived ~  Sex + Alone + Embarked + Fare"
+formula6 <- as.formula(equacio6)
+
+equacio7 <- "Survived ~ Pclass + SexR + Age + Alone + Embarked +Fare"
+formula7 <- as.formula(equacio7)
+
+equacio8 <- "Survived ~ Pclass + SexR + Age + Alone + Embarked "
+formula8 <- as.formula(equacio8)
+
+equacio9 <- "Survived ~ Pclass + SexR + Age + SibSp + Parch + Embarked+ Fare+Coberta"
+formula9 <- as.formula(equacio8)
+
+#Creem arbres
+rf1<- randomForest(formula=formula1, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf2<- randomForest(formula=formula2, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf3<- randomForest(formula=formula3, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf4<- randomForest(formula=formula4, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf5<- randomForest(formula=formula5, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf6<- randomForest(formula=formula6, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf7<- randomForest(formula=formula7, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf8<- randomForest(formula=formula8, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+rf9<- randomForest(formula=formula9, data=train, ntree=500, mtry=3,nodesize=0.01*nrow(train))
+
+
+mean(rf$err.rate)
+mean(rf1$err.rate)
+mean(rf2$err.rate)
+mean(rf3$err.rate)
+mean(rf4$err.rate)
+mean(rf5$err.rate)
+mean(rf6$err.rate)
+mean(rf7$err.rate)
+mean(rf8$err.rate)
+mean(rf9$err.rate)
+
+
 ```
 
 
+
+Veiem que rf1, rf2 , rf6 i rf8 són els que tenen menys error, els mirem:
+
+```{r}
+rf1
+rf2
+rf6
+rf8
+```
+Veiem que rf1 és el que té un OOB estimate of error rate més baix (17.17%)
+
+Veiem que rf1 classifica bé 498 "0" (90.71%) i en classifica malament 51 (9.29%) i que classifica 240 "1" correctament(70.18%) i en classifica malament 102 (29.82%).
+
+
+Provem aquest mateix model canviant alguns paràmetres:
+
+```{r}
+
+rf1a<- randomForest(formula=formula1, data=train, ntree=1000, mtry=3,nodesize=0.01*nrow(train))
+
+rf1b<- randomForest(formula=formula1, data=train, ntree=1000, mtry=4,nodesize=0.01*nrow(train))
+
+rf1c<- randomForest(formula=formula1, data=train, ntree=500, mtry=4,nodesize=0.01*nrow(train))
+
+rf1d<- randomForest(formula=formula1, data=train, ntree=500, mtry=4)
+
+rf1e<- randomForest(formula=formula1, data=train, ntree=500, mtry=4, importance=TRUE)
+
+rf1a
+rf1b
+rf1c
+rf1d
+rf1e
+
+
+```
+
+Veiem que rf1a és el que té un error rate més baix, del 17.28%, per tant l'utilitzem per fer les prediccions.
+
+
+```{r}
+
+#Predim resultats en train
+train$pred_arbre<-predict(rf1a,train)
+
+
+#Al predir el test, ens surt error que type of predictors in new data do not match,
+#Per tant primer igualem
+levels(test$Age) <- levels(train$Age)
+levels(test$SexF) <- levels(train$SexF)
+levels(test$Pclass) <- levels(train$Pclass)
+levels(test$Embarked) <- levels(train$Embarked)
+
+
+#Predim en test
+test$pred_arbre<- predict(rf1a,newdata=test)
+
+#Mostrem model
+rf1a
+plot (rf1a)
+legend('topright', colnames(rf1a$err.rate), col=1:3, fill=1:3)
+
+#Mostrem precisió en train
+matriu_conf<-confusionMatrix(train$pred_arbre,train$Survived)
+matriu_conf
+
+
+```
+
+Veiem que la precisió en train és del 90.68%. i que classifica correctament els "0" en un 89,49% i els "1" en un 93.02%.
+
+Tot i així, al estar comparant una predicció que s'ha fet amb les mateixes dades d'entrenament, hem de mirar l'oob score: tenim un 17.28% d'error.
+
+Tot i haver millorat la precisió en train, veiem que la precisió en test no ha augmentat : 77.03% en kaggle.
+
+Amb això el que pensem és que hi ha hagut sobreentrenament de les dades i que el model sap explicar molt bé train però al que li canvien les dades ja no ho explica bé. 
+
+Provem amb el mateix model i menys arbres:
+
+```{r}
+
+rf1aa<- randomForest(formula=formula1, data=train, ntree=200, mtry=3,nodesize=0.01*nrow(train))
+
+
+#Predim resultats en train
+train$pred_arbre<-predict(rf1aa,train)
+
+
+#Al predir el test, ens surt error que type of predictors in new data do not match,
+#Per tant primer igualem
+levels(test$Age) <- levels(train$Age)
+levels(test$SexF) <- levels(train$SexF)
+levels(test$Pclass) <- levels(train$Pclass)
+levels(test$Embarked) <- levels(train$Embarked)
+
+
+#Predim en test
+test$pred_arbre<- predict(rf1aa,newdata=test)
+
+#Mostrem model
+rf1aa
+plot (rf1aa)
+legend('topright', colnames(rf1aa$err.rate), col=1:3, fill=1:3)
+
+
+```
+
+Amb aquest model amb menys arbres, veiem que la precisió en test ha baixat : 75.598%.
+
+
+Finalment, provem de fer un arbre condicional:
+
+```{r}
+library(party)
+forest<-cforest(Survived~Family+Pclass+Sex+Age+SibSp+Parch+Fare+Embarked,data=train,controls=cforest_unbiased(ntree=500, mtry=3))
+
+
+
+```
+
+```{r}
+forest 
+
+#Predim en test
+test$pred_arbre<- predict(forest,newdata=test)
+
+```
+Amb aquesta predicció obtenim un 77.99% de precisió en test (kaggle).
 
 
 ##5. Representació dels resultats a partir de taules i gràfiques.
 
 
+```{r}
+table(train$Survived)
+```
+En train, sabem que tenim 891 registres, dels quals 549 no sobreviuen i 342 sobreviuen.
 
+D'aquests, sabem que si són dona o nen de primera o segona classe, tenen més probabilitat de sobreviure que si són home i adult o avi de segona o tercera classe:
+```{r}
+ggplot(data = train,aes(x=Agec3,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Sex)
+
+```
+
+```{r}
+ggplot(data = train,aes(x=Pclass,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Sex)
+
+```
+
+També sabem que els que anaven acompanyats tenen més supervivència que els que anaven sols:
+```{r}
+ggplot(data = train,aes(x=Alone,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Pclass)
+
+```
+
+També sabem que les variables que tenen més importància en el model són:
+(utilitzem l'arbre creat amb el model rf1a per veure les importàncies de les variables)
+SexR, Fare, Age i Pclass.
+
+```{r}
+# Obtenir importancia
+importance    <- importance(rf1a)
+varImportance <- data.frame(Variables = row.names(importance), Importance = round(importance[ ,'MeanDecreaseGini'],2))
+
+# Crear un rang basat en l'importància
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+# Visaulitzem importància relativa de les variables
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() 
+
+
+
+```
+`
 
 
 ##6. Resolució del problema. A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
 
-Hem vist que les dones tenen més probabilitat de sobreviure que els homes.
+Amb l'estudi de les dades del titànic el que volíem saber era la probabilitat de supervivència segons el grup al que pertanyia al passatger i en particular volíem predir quins passatgers van sobreviure.
 
-També hem vist que lm_1, tot i tenir una AIC més petita que lm_9, prediu millor, ja que les seves variables expliquen el model, no com passa amb lm_9, que hi ha algunes variables com fare que p>0.05 per tant no són explicatives del model. 
-Per tant en lm_1, veiem que les variables explicatives del model són : formula = Survived ~ Pclass + SexF + Age + Embarked + SibSp
-On veiem que el sexe i la classe són les variables que mñes influeixen en el model ( ja que tenen els pendents més grans).
+En primer lloc hem fet una neteja de les dades i hem creat algunes variables, alhora que analitzavem els valors que agafaven aquestes dades. Llavors hem fet un anàlisi visual per saber , prèvi a crear el model, quines eren les característiques que feien que es sobrevisqués i quines relacions hi ha entre les dades.
+
+De seguida hem vist que les dones tenen més supervivència que els homes, que els embarcats a C tenien més supervivència que els embarcats a Q i S, que els de primera classe tenien més supervivència que els de segona classe i aquests, més supervivència que els de tercera classe.
+
+També hem vist que els que tenen SibSp entre 0 i 4 tenien una freqüència de supervivència del 20 al 50% i que els que tenien més SibSp no sobrevivien. La variable Parch també és molt igual: Tenen una freqüència de supervivència del 20 al 60% els que tenen Parch de 0 a 3 o 5, sinó no sobreviuen.
+
+En quant a l'edat, hem vist que els nens tenen més probabilitat de sobreviure que els adults.
+
+Llavors hem fet tres contrasts d'hipòtesis:
+
+- Hi ha diferència entre la supervivència dels homes i de les dones?
+
+- Hi ha diferència entre la supervivència dels nens i dels adults?
+
+- Hi ha diferència entre la supervivència dels que anaven sols i dels que anaven acompanyats?
+
+I la resposta en tots és que si, que sí que hi ha diferència entre els grups. Les dones tenen més supervivència que els homes, els nens tenen més supervivència que els adults i els que anaven acompanyats tenen més supervivència que els que anaven sols.
+
+Llavors hem continuat amb una regressió, on hem predit els valors de test a partir del següent model (model amb millor precisió de test):
+
+Survived ~ Pclass + SexR + Age + Embarked + Alone
+
+On hem vist que les variables que més influeixen són Pclass i Sex (ja que són les que tenen més pendent) i també hem vist que tens més probabilitat de sobreviure si ets de primera classe, dona, ets jove, et vas embarcar a C i no anaves sol i tens menys probabilitatss de sobreviure si ets de tercera classe, home, amb molta edat, embarcat a S i vas sol.
+
+En els models de regressió creats, hem vist que tot i tenir algunes AIC altes, el model que prediu millor test no és el que té l'AIC més alt.
+
+Finalment, hem creat un arbre per classificar on hem vist que les variables més importants que utilitza són SexR, Fare, Age i Pclass.
 
 
+Hem provat varis models de regressió i arbres sense millorar la precisió de test de 77.99%, de manera que crec que sense tractar més les dades no crec que millorem més la precisió.
 
 #7. Codi: Cal adjuntar el codi, preferiblement en R, amb el que s'ha realitzat la neteja, anàlisi i representació de les dades. Si ho preferiu, també podeu treballar en Python.
 
-
-
-
+Extraiem les dades en csv per penjar a kaggle i comprovar la precisió.
 ```{r}
-write.csv(test[,c("PassengerId", "pred")], file="C:/Users/Laura/Desktop/UOC/Tipologia i cicle de vida de les dades/PRAC 2 Neteja i validació/titanic/test_predit.csv")
+write.csv(test[,c("PassengerId", "pred_arbre")], file="C:/Users/Laura/Desktop/UOC/Tipologia i cicle de vida de les dades/PRAC 2 Neteja i validació/titanic/test_predit.csv")
 
 
 ```
+
+
+
+
+
+
 
 
